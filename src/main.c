@@ -62,6 +62,7 @@ static int settings_day_hour = 8;
 static int settings_day_minute = 0;
 static int settings_night_hour = 21;
 static int settings_night_minute = 0;
+
 static int selected_tab;
 static int selected_field;
 
@@ -70,13 +71,28 @@ static inline int min_int(int a, int b)
     return a < b ? a : b;
 }
 
-static lv_color_t get_background_color(int current_hour)
+static bool time_in_interval(int current, int start, int end)
 {
-    if (current_hour >= 8 && current_hour <= 20) {
+    if (start <= end) {
+        return current >= start && current <= end;
+    }
+
+    return current >= start || current <= end;
+}
+
+static lv_color_t get_background_color(int current_hour, int current_minute)
+{
+    int current_minutes = current_hour * 60 + current_minute;
+    int day_transition = settings_day_hour * 60 + settings_day_minute;
+    int night_transition = settings_night_hour * 60 + settings_night_minute;
+    int day_end = (night_transition + 24 * 60 - 1) % (24 * 60);
+    int night_end = (day_transition + 24 * 60 - 1) % (24 * 60);
+
+    if (time_in_interval(current_minutes, day_transition, day_end)) {
         return lv_color_make(0xCC, 0xEE, 0xCC);
     }
 
-    if ((current_hour >= 21 && current_hour <= 23) || (current_hour >= 0 && current_hour <= 7)) {
+    if (time_in_interval(current_minutes, night_transition, night_end)) {
         return lv_color_make(0xFF, 0xCC, 0xCC);
     }
 
@@ -105,7 +121,7 @@ static void update_hand(lv_obj_t *hand, lv_point_precise_t points[2], int32_t an
 
 static void update_background_color(void)
 {
-    lv_obj_set_style_bg_color(background_obj, get_background_color(hour), 0);
+    lv_obj_set_style_bg_color(background_obj, get_background_color(hour, minute), 0);
 }
 
 static void update_clock_hands(void);
@@ -445,7 +461,7 @@ static void create_settings_menu(lv_obj_t *screen)
     lv_obj_t *prev_label = lv_label_create(settings_prev_btn);
     lv_label_set_text(prev_label, "<");
     lv_obj_center(prev_label);
-    lv_obj_align(settings_prev_btn, LV_ALIGN_CENTER, -72, 40);
+    lv_obj_align(settings_prev_btn, LV_ALIGN_BOTTOM_MID, -90, -140);
 
     settings_next_btn = lv_btn_create(settings_screen);
     lv_obj_set_size(settings_next_btn, 56, 40);
@@ -456,7 +472,7 @@ static void create_settings_menu(lv_obj_t *screen)
     lv_obj_t *next_label = lv_label_create(settings_next_btn);
     lv_label_set_text(next_label, ">");
     lv_obj_center(next_label);
-    lv_obj_align(settings_next_btn, LV_ALIGN_CENTER, 72, 40);
+    lv_obj_align(settings_next_btn, LV_ALIGN_BOTTOM_MID, 90, -140);
 
     settings_dec_btn = lv_btn_create(settings_screen);
     lv_obj_set_size(settings_dec_btn, 80, 40);
@@ -467,7 +483,7 @@ static void create_settings_menu(lv_obj_t *screen)
     lv_obj_t *dec_label = lv_label_create(settings_dec_btn);
     lv_label_set_text(dec_label, "-    ");
     lv_obj_center(dec_label);
-    lv_obj_align(settings_dec_btn, LV_ALIGN_CENTER, -72, 90);
+    lv_obj_align(settings_dec_btn, LV_ALIGN_BOTTOM_MID, -90, -90);
 
     settings_inc_btn = lv_btn_create(settings_screen);
     lv_obj_set_size(settings_inc_btn, 80, 40);
@@ -478,7 +494,7 @@ static void create_settings_menu(lv_obj_t *screen)
     lv_obj_t *inc_label = lv_label_create(settings_inc_btn);
     lv_label_set_text(inc_label, "+");
     lv_obj_center(inc_label);
-    lv_obj_align(settings_inc_btn, LV_ALIGN_CENTER, 72, 90);
+    lv_obj_align(settings_inc_btn, LV_ALIGN_BOTTOM_MID, 90, -90);
 
     settings_save_btn = lv_btn_create(settings_screen);
     lv_obj_set_size(settings_save_btn, 100, 40);
@@ -570,7 +586,7 @@ void main(void)
 
     background_obj = lv_obj_create(screen);
     lv_obj_set_size(background_obj, LV_HOR_RES, LV_VER_RES);
-    lv_obj_set_style_bg_color(background_obj, get_background_color(hour), 0);
+    lv_obj_set_style_bg_color(background_obj, get_background_color(hour, minute), 0);
     lv_obj_set_style_bg_opa(background_obj, LV_OPA_COVER, 0);
     lv_obj_clear_flag(background_obj, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -641,6 +657,9 @@ void main(void)
         LOG_ERR("Failed to turn display blanking off: %d", ret);
         return;
     }
+
+    update_background_color();
+    update_clock_hands();
 
     while (1) {
         lv_timer_handler();
