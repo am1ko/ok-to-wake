@@ -33,6 +33,15 @@ static lv_obj_t *minute_hand;
 static lv_obj_t *second_hand;
 static lv_obj_t *hour_markers[12];
 static lv_obj_t *hour_numbers[12];
+static lv_obj_t *settings_screen;
+static lv_obj_t *settings_field_btns[3];
+static lv_obj_t *settings_value_labels[3];
+static lv_obj_t *settings_inc_btn;
+static lv_obj_t *settings_dec_btn;
+static lv_obj_t *settings_prev_btn;
+static lv_obj_t *settings_next_btn;
+static lv_obj_t *settings_save_btn;
+static lv_obj_t *settings_cancel_btn;
 
 static lv_point_precise_t hour_hand_points[2];
 static lv_point_precise_t minute_hand_points[2];
@@ -42,6 +51,10 @@ static lv_point_precise_t hour_marker_points[12][2];
 static int hour = INITIAL_HOUR;
 static int minute = INITIAL_MINUTE;
 static int second = INITIAL_SECOND;
+static int settings_hour;
+static int settings_minute;
+static int settings_second;
+static int selected_field;
 
 static inline int min_int(int a, int b)
 {
@@ -84,6 +97,248 @@ static void update_hand(lv_obj_t *hand, lv_point_precise_t points[2], int32_t an
 static void update_background_color(void)
 {
     lv_obj_set_style_bg_color(background_obj, get_background_color(hour), 0);
+}
+
+static void update_clock_hands(void);
+
+static void update_settings_time_labels(void)
+{
+    lv_label_set_text_fmt(settings_value_labels[0], "%02d", settings_hour);
+    lv_label_set_text_fmt(settings_value_labels[1], "%02d", settings_minute);
+    lv_label_set_text_fmt(settings_value_labels[2], "%02d", settings_second);
+}
+
+static void update_settings_field_styles(void)
+{
+    for (int i = 0; i < 3; i++) {
+        if (i == selected_field) {
+            lv_obj_set_style_border_width(settings_field_btns[i], 3, LV_PART_MAIN);
+            lv_obj_set_style_border_color(settings_field_btns[i], lv_color_make(0x33, 0x99, 0xFF), LV_PART_MAIN);
+        } else {
+            lv_obj_set_style_border_width(settings_field_btns[i], 1, LV_PART_MAIN);
+            lv_obj_set_style_border_color(settings_field_btns[i], lv_color_white(), LV_PART_MAIN);
+        }
+    }
+}
+
+static void hide_settings(void)
+{
+    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void show_settings(void)
+{
+    settings_hour = hour;
+    settings_minute = minute;
+    settings_second = second;
+    selected_field = 0;
+    update_settings_time_labels();
+    update_settings_field_styles();
+    lv_obj_clear_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(settings_screen);
+}
+
+static void adjust_settings_field(int delta)
+{
+    if (selected_field == 0) {
+        settings_hour = (settings_hour + delta + 24) % 24;
+    } else if (selected_field == 1) {
+        settings_minute = (settings_minute + delta + 60) % 60;
+    } else {
+        settings_second = (settings_second + delta + 60) % 60;
+    }
+    update_settings_time_labels();
+}
+
+static void settings_event_cb(lv_event_t *e)
+{
+    lv_obj_t *target = lv_event_get_target(e);
+
+    if (target == settings_prev_btn) {
+        selected_field = (selected_field + 2) % 3;
+        update_settings_field_styles();
+        return;
+    }
+    if (target == settings_next_btn) {
+        selected_field = (selected_field + 1) % 3;
+        update_settings_field_styles();
+        return;
+    }
+    if (target == settings_inc_btn) {
+        adjust_settings_field(1);
+        return;
+    }
+    if (target == settings_dec_btn) {
+        adjust_settings_field(-1);
+        return;
+    }
+    if (target == settings_save_btn) {
+        hour = settings_hour;
+        minute = settings_minute;
+        second = settings_second;
+        update_background_color();
+        update_clock_hands();
+        hide_settings();
+        return;
+    }
+    if (target == settings_cancel_btn) {
+        hide_settings();
+        return;
+    }
+
+    for (int i = 0; i < 3; i++) {
+        if (target == settings_field_btns[i]) {
+            selected_field = i;
+            update_settings_field_styles();
+            return;
+        }
+    }
+}
+
+static void gear_button_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        show_settings();
+    }
+}
+
+static void create_settings_menu(lv_obj_t *screen)
+{
+    settings_screen = lv_obj_create(screen);
+    lv_obj_set_size(settings_screen, LV_HOR_RES, LV_VER_RES);
+    lv_obj_set_style_bg_color(settings_screen, lv_color_make(0x11, 0x11, 0x11), 0);
+    lv_obj_set_style_bg_opa(settings_screen, LV_OPA_COVER, 0);
+    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(settings_screen, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *title = lv_label_create(settings_screen);
+    lv_label_set_text(title, "Set Time");
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(title, lv_color_white(), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
+
+    lv_obj_t *time_row = lv_obj_create(settings_screen);
+    lv_obj_set_size(time_row, LV_HOR_RES, 80);
+    lv_obj_set_style_bg_opa(time_row, LV_OPA_TRANSP, 0);
+    lv_obj_clear_flag(time_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_align(time_row, LV_ALIGN_CENTER, 0, -20);
+
+    const int field_width = 80;
+    const int field_height = 60;
+    const int field_spacing = 12;
+    const int base_x = -field_width - field_spacing;
+
+    for (int i = 0; i < 3; i++) {
+        settings_field_btns[i] = lv_btn_create(time_row);
+        lv_obj_set_size(settings_field_btns[i], field_width, field_height);
+        lv_obj_set_style_border_width(settings_field_btns[i], 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(settings_field_btns[i], lv_color_white(), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(settings_field_btns[i], lv_color_black(), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(settings_field_btns[i], LV_OPA_20, LV_PART_MAIN);
+        lv_obj_set_style_text_color(settings_field_btns[i], lv_color_white(), 0);
+        lv_obj_add_event_cb(settings_field_btns[i], settings_event_cb, LV_EVENT_CLICKED, NULL);
+
+        lv_obj_t *label = lv_label_create(settings_field_btns[i]);
+        lv_label_set_text(label, "00");
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_28, 0);
+        lv_obj_center(label);
+        settings_value_labels[i] = label;
+
+        lv_obj_align(settings_field_btns[i], LV_ALIGN_CENTER, base_x + i * (field_width + field_spacing), 0);
+
+        if (i < 2) {
+            lv_obj_t *colon = lv_label_create(time_row);
+            lv_label_set_text(colon, ":");
+            lv_obj_set_style_text_font(colon, &lv_font_montserrat_28, 0);
+            lv_obj_set_style_text_color(colon, lv_color_white(), 0);
+            lv_obj_align(colon, LV_ALIGN_CENTER, base_x + i * (field_width + field_spacing) + field_width / 2 + field_spacing / 2, 0);
+        }
+    }
+
+    settings_prev_btn = lv_btn_create(settings_screen);
+    lv_obj_set_size(settings_prev_btn, 56, 40);
+    lv_obj_set_style_bg_color(settings_prev_btn, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(settings_prev_btn, LV_OPA_30, LV_PART_MAIN);
+    lv_obj_set_style_border_color(settings_prev_btn, lv_color_white(), LV_PART_MAIN);
+    lv_obj_add_event_cb(settings_prev_btn, settings_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *prev_label = lv_label_create(settings_prev_btn);
+    lv_label_set_text(prev_label, "<");
+    lv_obj_center(prev_label);
+    lv_obj_align(settings_prev_btn, LV_ALIGN_CENTER, -72, 40);
+
+    settings_next_btn = lv_btn_create(settings_screen);
+    lv_obj_set_size(settings_next_btn, 56, 40);
+    lv_obj_set_style_bg_color(settings_next_btn, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(settings_next_btn, LV_OPA_30, LV_PART_MAIN);
+    lv_obj_set_style_border_color(settings_next_btn, lv_color_white(), LV_PART_MAIN);
+    lv_obj_add_event_cb(settings_next_btn, settings_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *next_label = lv_label_create(settings_next_btn);
+    lv_label_set_text(next_label, ">");
+    lv_obj_center(next_label);
+    lv_obj_align(settings_next_btn, LV_ALIGN_CENTER, 72, 40);
+
+    settings_dec_btn = lv_btn_create(settings_screen);
+    lv_obj_set_size(settings_dec_btn, 80, 40);
+    lv_obj_set_style_bg_color(settings_dec_btn, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(settings_dec_btn, LV_OPA_30, LV_PART_MAIN);
+    lv_obj_set_style_border_color(settings_dec_btn, lv_color_white(), LV_PART_MAIN);
+    lv_obj_add_event_cb(settings_dec_btn, settings_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *dec_label = lv_label_create(settings_dec_btn);
+    lv_label_set_text(dec_label, "-    ");
+    lv_obj_center(dec_label);
+    lv_obj_align(settings_dec_btn, LV_ALIGN_CENTER, -72, 90);
+
+    settings_inc_btn = lv_btn_create(settings_screen);
+    lv_obj_set_size(settings_inc_btn, 80, 40);
+    lv_obj_set_style_bg_color(settings_inc_btn, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(settings_inc_btn, LV_OPA_30, LV_PART_MAIN);
+    lv_obj_set_style_border_color(settings_inc_btn, lv_color_white(), LV_PART_MAIN);
+    lv_obj_add_event_cb(settings_inc_btn, settings_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *inc_label = lv_label_create(settings_inc_btn);
+    lv_label_set_text(inc_label, "+");
+    lv_obj_center(inc_label);
+    lv_obj_align(settings_inc_btn, LV_ALIGN_CENTER, 72, 90);
+
+    settings_save_btn = lv_btn_create(settings_screen);
+    lv_obj_set_size(settings_save_btn, 100, 40);
+    lv_obj_set_style_bg_color(settings_save_btn, lv_color_make(0x33, 0x99, 0x33), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(settings_save_btn, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_add_event_cb(settings_save_btn, settings_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *save_label = lv_label_create(settings_save_btn);
+    lv_label_set_text(save_label, "Save");
+    lv_obj_center(save_label);
+    lv_obj_align(settings_save_btn, LV_ALIGN_BOTTOM_LEFT, 40, -20);
+
+    settings_cancel_btn = lv_btn_create(settings_screen);
+    lv_obj_set_size(settings_cancel_btn, 100, 40);
+    lv_obj_set_style_bg_color(settings_cancel_btn, lv_color_make(0x99, 0x33, 0x33), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(settings_cancel_btn, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_add_event_cb(settings_cancel_btn, settings_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *cancel_label = lv_label_create(settings_cancel_btn);
+    lv_label_set_text(cancel_label, "Cancel");
+    lv_obj_center(cancel_label);
+    lv_obj_align(settings_cancel_btn, LV_ALIGN_BOTTOM_RIGHT, -40, -20);
+}
+
+static void create_gear_button(lv_obj_t *parent)
+{
+    lv_obj_t *gear_btn = lv_btn_create(parent);
+    lv_obj_set_size(gear_btn, 40, 40);
+    lv_obj_set_style_radius(gear_btn, 12, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(gear_btn, lv_color_make(0x22, 0x22, 0x22), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(gear_btn, LV_OPA_70, LV_PART_MAIN);
+    lv_obj_set_style_border_width(gear_btn, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(gear_btn, lv_color_white(), LV_PART_MAIN);
+    lv_obj_align(gear_btn, LV_ALIGN_TOP_RIGHT, -10, 10);
+    lv_obj_add_event_cb(gear_btn, gear_button_event_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *label = lv_label_create(gear_btn);
+#ifndef LV_SYMBOL_SETTINGS
+#define LV_SYMBOL_SETTINGS "⚙"
+#endif
+    lv_label_set_text(label, LV_SYMBOL_SETTINGS);
+    lv_obj_set_style_text_color(label, lv_color_white(), 0);
+    lv_obj_center(label);
 }
 
 static void update_clock_hands(void)
@@ -194,6 +449,9 @@ void main(void)
     lv_obj_set_style_line_rounded(second_hand, true, LV_PART_MAIN);
 
     update_clock_hands();
+
+    create_settings_menu(screen);
+    create_gear_button(screen);
 
     lv_timer_create(clock_timer_cb, 1000, NULL);
 
