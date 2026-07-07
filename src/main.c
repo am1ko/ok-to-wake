@@ -5,7 +5,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
-#include <zephyr/display/display.h>
+#include <zephyr/drivers/display.h>
 #include <zephyr/sys/printk.h>
 
 #define APP_START_HOUR 8
@@ -226,11 +226,7 @@ int main(void)
     }
 
     struct display_capabilities capabilities;
-    int ret = display_capabilities_get(display, &capabilities);
-    if (ret < 0) {
-        printk("Failed to query display capabilities: %d\n", ret);
-        return 0;
-    }
+    display_get_capabilities(display, &capabilities);
 
     uint16_t width = capabilities.x_resolution > 0 ? capabilities.x_resolution : 480;
     uint16_t height = capabilities.y_resolution > 0 ? capabilities.y_resolution : 272;
