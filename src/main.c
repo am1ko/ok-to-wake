@@ -26,9 +26,7 @@ int main(void)
     lv_obj_t *screen = lv_scr_act();
 
     graphics_init(screen);
-    settings_init(screen);
-
-    lv_timer_create(graphics_tick, 1000, NULL);
+    settings_ui_init(screen, display_dev);
 
     ret = display_blanking_off(display_dev);
     if (ret < 0 && ret != -ENOSYS) {
